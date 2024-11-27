@@ -1,4 +1,4 @@
-import React from 'react';
+// import React from 'react';
 import { motion } from 'framer-motion';
 
 export default function NewInvoice() {
@@ -59,6 +59,10 @@ export default function NewInvoice() {
           </div>
         </div>
       </form>
+      <footer className="bg-gray-800 text-white p-4 mt-32">
+        <p>&copy; 2024 Kenyan Tax Filing Assistance. All rights reserved.</p>
+      </footer>
     </motion.div>
+    
   );
 }

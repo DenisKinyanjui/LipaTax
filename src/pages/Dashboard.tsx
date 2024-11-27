@@ -34,6 +34,9 @@ export default function Dashboard() {
           <TaxDeadlines />
         </div>
       </div>
+      <footer className="bg-gray-800 text-white p-4">
+        <p>&copy; 2024 Kenyan Tax Filing Assistance. All rights reserved.</p>
+      </footer>
     </motion.div>
   );
 }
