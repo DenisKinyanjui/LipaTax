@@ -1,250 +1,194 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Calculator, Upload, Download, CreditCard } from 'lucide-react';
+import React, { useState } from "react";
+import * as XLSX from "xlsx";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
-export default function TaxCalculator() {
-  const [calculatorType, setCalculatorType] = useState('monthly');
-  const [showPaymentInstructions, setShowPaymentInstructions] = useState(false);
+const TaxFilingPage = () => {
+  const [taxDetails, setTaxDetails] = useState({
+    income: "",
+    nhif: 0,
+    nssf: 0,
+    personalRelief: 2400, // Default personal relief
+    taxLiability: null,
+  });
+  const [showGuide, setShowGuide] = useState(false);
+
+  // Calculate NHIF contribution based on gross income
+  const calculateNHIF = (income: number) => {
+    if (income <= 5999) return 150;
+    if (income <= 7999) return 300;
+    if (income <= 11999) return 400;
+    if (income <= 14999) return 500;
+    if (income <= 19999) return 600;
+    if (income <= 24999) return 750;
+    if (income <= 29999) return 850;
+    if (income <= 34999) return 900;
+    if (income <= 39999) return 950;
+    if (income >= 40000) return 1000;
+    return 0;
+  };
+
+  // Calculate NSSF contribution (6% of income, capped at KES 720)
+  const calculateNSSF = (income: number) => {
+    return Math.min(income * 0.06, 720);
+  };
+
+  // Handle gross income input and update deductions
+  const handleIncomeChange = (e: { target: { value: any; }; }) => {
+    const income = parseFloat(e.target.value || 0);
+    const nhif = calculateNHIF(income);
+    const nssf = calculateNSSF(income);
+
+    setTaxDetails({
+      ...taxDetails,
+      income,
+      nhif,
+      nssf,
+    });
+  };
+
+  // Calculate PAYE tax liability
+  const calculateTax = () => {
+    const { income, nhif, nssf, personalRelief } = taxDetails;
+    const taxableIncome = income - nssf; // Remove NSSF contributions from taxable income
+    let taxLiability = 0;
+
+    // Apply Kenyan PAYE tax brackets
+    if (taxableIncome <= 24000) {
+      taxLiability = taxableIncome * 0.1; // 10% for the first KES 24,000
+    } else if (taxableIncome <= 32333) {
+      taxLiability = 2400 + (taxableIncome - 24000) * 0.25; // 25% for income above 24,000 up to 32,333
+    } else {
+      taxLiability = 2400 + 2083.25 + (taxableIncome - 32333) * 0.3; // 30% for income above 32,333
+    }
+
+    // Apply reliefs
+    taxLiability = Math.max(0, taxLiability - personalRelief - nhif);
+
+    setTaxDetails({ ...taxDetails, taxLiability });
+  };
+
+  // Create and download the Excel file for iTax
+  const createTaxExcel = () => {
+    const { income, nhif, nssf, personalRelief, taxLiability } = taxDetails;
+
+    // Create Excel data (iTax-compatible structure)
+    const data = [
+      ["Taxpayer Details", "", ""],
+      ["Gross Income", income],
+      ["NHIF Contribution", nhif],
+      ["NSSF Contribution", nssf],
+      ["Personal Relief", personalRelief],
+      ["Tax Liability", taxLiability],
+    ];
+
+    // Create workbook and worksheet
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Tax Return");
+
+    // Add a placeholder for macro (this is only a placeholder, actual macro integration needs VBA)
+    const zip = new JSZip();
+    const fileName = "Tax_Return_Form.xlsx";
+    const xlsxData = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+
+    // Add Excel file to zip
+    zip.file(fileName, xlsxData);
+
+    // Create ZIP file
+    zip.generateAsync({ type: "blob" }).then((content) => {
+      saveAs(content, "Tax_Filing_Package.zip");
+    });
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-8"
-    >
-      {/* Tax Calculator Header */}
-      <div className="bg-white rounded-xl shadow-sm p-8">
-        <div className="flex items-center space-x-4 mb-8">
-          <div className="p-3 rounded-full bg-blue-100">
-            <Calculator className="h-6 w-6 text-blue-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Tax Calculator</h1>
-            <p className="text-gray-600 mt-1">Calculate your tax liability and generate P9 forms</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-100">
+      {/* <header className="bg-blue-600 text-white p-6">
+        <h1 className="text-3xl font-bold">Kenyan Tax Filing Assistance</h1>
+      </header> */}
 
-        {/* Calculator Type Selector */}
-        <div className="flex space-x-4 mb-6">
-          <button
-            onClick={() => setCalculatorType('monthly')}
-            className={`px-4 py-2 rounded-lg ${
-              calculatorType === 'monthly'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            Monthly PAYE
-          </button>
-          <button
-            onClick={() => setCalculatorType('annual')}
-            className={`px-4 py-2 rounded-lg ${
-              calculatorType === 'annual'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            Annual Returns
-          </button>
-          <button
-            onClick={() => setCalculatorType('vat')}
-            className={`px-4 py-2 rounded-lg ${
-              calculatorType === 'vat'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            VAT Calculator
-          </button>
-        </div>
+      <main className="p-6">
+        {/* Hero Section */}
+        <section className="bg-blue-600 p-6 rounded-lg shadow-md mb-8">
+          <h2 className="text-2xl text-gray-200 font-bold mb-4">Simplify Your Tax Filing in Kenya</h2>
+          <p className="text-gray-100 mb-4">
+            Effortlessly calculate your PAYE, NHIF, and NSSF deductions, generate tax return forms, and navigate iTax with ease.
+          </p>
+        </section>
 
-        {/* Calculator Form */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-6">
+        {/* Tax Calculation Section */}
+        <section id="calculator" className="mb-8">
+          <h2 className="text-xl font-bold mb-4">Tax Calculator</h2>
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Basic Salary</label>
+              <label className="block font-bold mb-1">Gross Income (KES):</label>
               <input
                 type="number"
-                className="mt-1 block w-full"
-                placeholder="Enter amount"
+                placeholder="Enter your gross income"
+                className="border p-2 w-full"
+                onChange={handleIncomeChange}
               />
             </div>
-            
             <div>
-              <label className="block text-sm font-medium text-gray-700">Benefits in Kind</label>
-              <input
-                type="number"
-                className="mt-1 block w-full"
-                placeholder="House, Car, etc."
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Allowances
-                <span className="text-sm text-gray-500 ml-2">(Transport, Entertainment, etc.)</span>
-              </label>
-              <input
-                type="number"
-                className="mt-1 block w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">NSSF Contribution</label>
-              <select className="mt-1 block w-full">
-                <option>Tier I (Up to KES 6,000)</option>
-                <option>Tier I & II (Up to KES 18,000)</option>
-                <option>Custom Amount</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">NHIF Contribution</label>
-              <input
-                type="number"
-                className="mt-1 block w-full"
-                placeholder="Based on gross pay"
-              />
-            </div>
-          </div>
-
-          <div className="bg-gray-50 p-6 rounded-lg space-y-6">
-            <h2 className="text-lg font-semibold text-gray-900">Tax Summary</h2>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Gross Pay</span>
-                <span className="font-medium">KES 0.00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Taxable Income</span>
-                <span className="font-medium">KES 0.00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">PAYE</span>
-                <span className="font-medium">KES 0.00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">NHIF Relief (15%)</span>
-                <span className="font-medium">KES 0.00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Personal Relief</span>
-                <span className="font-medium">KES 2,400.00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Insurance Relief</span>
-                <span className="font-medium">KES 0.00</span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-gray-200">
-              <div className="flex justify-between text-lg">
-                <span className="font-semibold">Net Tax Payable</span>
-                <span className="font-semibold text-blue-600">KES 0.00</span>
-              </div>
-            </div>
-
-            <div className="flex space-x-4 mt-6">
-              <button
-                onClick={() => setShowPaymentInstructions(true)}
-                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-              >
-                <CreditCard className="w-4 h-4 mr-2" />
-                Pay Now
-              </button>
-              <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <Download className="w-4 h-4 mr-2" />
-                Download P9
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* iTax Upload Guide */}
-      <div className="bg-white rounded-xl shadow-sm p-8">
-        <div className="flex items-center space-x-4 mb-6">
-          <div className="p-3 rounded-full bg-purple-100">
-            <Upload className="h-6 w-6 text-purple-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900">iTax Upload Guide</h2>
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-start space-x-4">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-blue-600 font-medium">1</span>
+              <label className="block font-bold mb-1">NHIF Contribution:</label>
+              <p className="border p-2 bg-gray-100">{`KES ${taxDetails.nhif.toFixed(2)}`}</p>
             </div>
             <div>
-              <h3 className="font-medium text-gray-900">Download Generated Return</h3>
-              <p className="text-gray-600">Export your calculated tax return in iTax-compatible format</p>
-            </div>
-          </div>
-
-          <div className="flex items-start space-x-4">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-blue-600 font-medium">2</span>
+              <label className="block font-bold mb-1">NSSF Contribution:</label>
+              <p className="border p-2 bg-gray-100">{`KES ${taxDetails.nssf.toFixed(2)}`}</p>
             </div>
             <div>
-              <h3 className="font-medium text-gray-900">Log into iTax Portal</h3>
-              <p className="text-gray-600">Visit the KRA iTax portal and sign in to your account</p>
+              <label className="block font-bold mb-1">Personal Relief:</label>
+              <p className="border p-2 bg-gray-100">{`KES ${taxDetails.personalRelief.toFixed(2)}`}</p>
             </div>
-          </div>
-
-          <div className="flex items-start space-x-4">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-blue-600 font-medium">3</span>
-            </div>
-            <div>
-              <h3 className="font-medium text-gray-900">Upload Return File</h3>
-              <p className="text-gray-600">Navigate to Returns section and upload the generated file</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Payment Instructions Modal */}
-      {showPaymentInstructions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold mb-4">Payment Instructions</h3>
-            
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-medium mb-2">M-Pesa Payment</h4>
-                <ol className="list-decimal list-inside space-y-2 text-sm">
-                  <li>Go to M-Pesa menu</li>
-                  <li>Select "Pay Bill"</li>
-                  <li>Enter Business No: 572572</li>
-                  <li>Enter Account No: Your KRA PIN</li>
-                  <li>Enter Amount: KES XXX</li>
-                  <li>Enter your M-Pesa PIN</li>
-                </ol>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-medium mb-2">Bank Transfer</h4>
-                <p className="text-sm text-gray-600">
-                  Transfer to KRA Collection Account:<br />
-                  Bank: National Bank of Kenya<br />
-                  Account: 01001000903200<br />
-                  Reference: Your KRA PIN
-                </p>
-              </div>
-            </div>
-
             <button
-              onClick={() => setShowPaymentInstructions(false)}
-              className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded mt-4"
+              onClick={calculateTax}
             >
-              Close
+              Calculate Tax Liability
             </button>
+            {taxDetails.taxLiability !== null && (
+              <div className="mt-4">
+                <h3 className="font-bold text-lg">Estimated Tax Liability:</h3>
+                <p className="border p-2 bg-green-100">{`KES ${taxDetails.taxLiability.toFixed(2)}`}</p>
+                <button
+                  className="bg-green-600 text-white px-4 py-2 rounded mt-2"
+                  onClick={createTaxExcel}
+                >
+                  Download Tax Return Form (Excel)
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-    </motion.div>
+        </section>
+
+        {/* iTax Filing Guide */}
+        <section id="guide" className="mb-8">
+          <h2 className="text-xl font-bold mb-4">Step-by-Step iTax Filing Guide</h2>
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+            onClick={() => setShowGuide(!showGuide)}
+          >
+            {showGuide ? "Hide Guide" : "Show Guide"}
+          </button>
+          {showGuide && (
+            <ol className="list-decimal pl-6 mt-4 space-y-4">
+              <li>Log in to your iTax account at <a href="https://itax.kra.go.ke/" className="text-blue-600 underline" target="_blank" rel="noopener noreferrer">iTax Portal</a>.</li>
+              <li>Navigate to the "Returns" section and select "File Return".</li>
+              <li>Choose the appropriate tax return form for your income type.</li>
+              <li>Upload the downloaded tax return form generated from this page.</li>
+              <li>Review and confirm the details, then submit the return.</li>
+              <li>Download the acknowledgment receipt for your records.</li>
+            </ol>
+          )}
+        </section>
+      </main>
+
+      <footer className="bg-gray-800 text-white p-4">
+        <p>&copy; 2024 Kenyan Tax Filing Assistance. All rights reserved.</p>
+      </footer>
+    </div>
   );
-}
+};
+
+export default TaxFilingPage;
